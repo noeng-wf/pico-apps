@@ -4,20 +4,25 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include "pico/stdlib.h"
+#include "hardware/gpio.h"
+#include "hardware/timer.h"
+
+#define PICO_DEFAULT_LED_PIN 25
+
+void my_sleep_ms(uint delay_ms) {
+    uint64_t base = time_us_64();
+    while ((int64_t)(time_us_64() - base) < (delay_ms * 1000)) {
+    }
+}
 
 int main() {
-#ifndef PICO_DEFAULT_LED_PIN
-#warning blink example requires a board with a regular LED
-#else
     const uint LED_PIN = PICO_DEFAULT_LED_PIN;
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
     while (true) {
         gpio_put(LED_PIN, 1);
-        sleep_ms(250);
+        my_sleep_ms(700);
         gpio_put(LED_PIN, 0);
-        sleep_ms(750);
+        my_sleep_ms(300);
     }
-#endif
 }
