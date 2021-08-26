@@ -167,7 +167,7 @@ void my_sleep_ms(uint32_t delay_ms) {
     }
 }
 
-int main() {
+void run_app() {
     const uint32_t LED_PIN = MY_PICO_DEFAULT_LED_PIN;
     my_gpio_init(LED_PIN);
     my_gpio_set_dir_out(LED_PIN);

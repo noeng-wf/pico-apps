@@ -17,7 +17,8 @@ add_compile_options(-Wall
         )
 
 add_executable(blink
-        blink.c
+        app.c
+        main.c
         )
 
 # Pull in our pico_stdlib which pulls in commonly used features
