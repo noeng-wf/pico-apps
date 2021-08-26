@@ -16,15 +16,10 @@ add_compile_options(-Wall
         -Wno-maybe-uninitialized
         )
 
-add_executable(blink
-        main.c
+add_library(app STATIC
+        app.c
+        hw.c
         )
 
-# Pull in our pico_stdlib which pulls in commonly used features
-target_link_libraries(blink
-    pico_stdlib
-    ${CMAKE_SOURCE_DIR}/../lib/build/libapp.a
-)
-
 # create map/bin/hex file etc.
-pico_add_extra_outputs(blink)
+#pico_add_extra_outputs(app)
