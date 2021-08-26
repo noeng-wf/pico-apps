@@ -18,6 +18,7 @@ add_compile_options(-Wall
 
 add_executable(blink
         app.c
+        hw.c
         main.c
         )
 
