@@ -24,162 +24,72 @@ typedef volatile uint32_t io_wo_32;
 
 // --------------------------------------------------------------------------------------
 
-typedef struct {
-    io_rw_32 inte[4];
-    io_rw_32 intf[4];
-    io_rw_32 ints[4];
-} io_irq_ctrl_hw_t;
+#define IO_BANK0_GPIO0_STATUS_OFFSET 0x00000000
 
 typedef struct {
-    struct {
-        io_rw_32 status;
-        io_rw_32 ctrl;
-    } io[30];
-    io_rw_32 intr[4];
-    io_irq_ctrl_hw_t proc0_irq_ctrl;
-    io_irq_ctrl_hw_t proc1_irq_ctrl;
-    io_irq_ctrl_hw_t dormant_wake_irq_ctrl;
-} iobank0_hw_t;
+    io_rw_32 status;
+    io_rw_32 ctrl;
+} iobank0_hw_io_t;
 
-#define iobank0_hw ((iobank0_hw_t *const)IO_BANK0_BASE)
+static iobank0_hw_io_t *const iobank0_io = (iobank0_hw_io_t*)(IO_BANK0_BASE + IO_BANK0_GPIO0_STATUS_OFFSET);
 
-typedef struct {
-    io_rw_32 voltage_select;
-    io_rw_32 io[30];
-} padsbank0_hw_t;
+#define PADS_BANK0_GPIO0_OFFSET 0x00000004
 
-#define padsbank0_hw ((padsbank0_hw_t *)PADS_BANK0_BASE)
+static io_rw_32 *const padsbank0_io = (io_rw_32*)(PADS_BANK0_BASE + PADS_BANK0_GPIO0_OFFSET);
 
-typedef struct {
-    io_rw_32 accum[2];
-    io_rw_32 base[3];
-    io_ro_32 pop[3];
-    io_ro_32 peek[3];
-    io_rw_32 ctrl[2];
-    io_rw_32 add_raw[2];
-    io_wo_32 base01;
-} interp_hw_t;
+#define SIO_GPIO_OUT_SET_OFFSET 0x00000014
+#define SIO_GPIO_OUT_CLR_OFFSET 0x00000018
+#define SIO_GPIO_OE_SET_OFFSET 0x00000024
 
-typedef struct {
-    io_ro_32 cpuid;
-    io_ro_32 gpio_in;
-    io_ro_32 gpio_hi_in;
-    uint32_t _pad;
+static io_rw_32 *const sio_gpio_out_set = (io_rw_32*)(SIO_BASE + SIO_GPIO_OUT_SET_OFFSET);
+static io_rw_32 *const sio_gpio_out_clr = (io_rw_32*)(SIO_BASE + SIO_GPIO_OUT_CLR_OFFSET);
+static io_rw_32 *const sio_gpio_oe_set = (io_rw_32*)(SIO_BASE + SIO_GPIO_OE_SET_OFFSET);
 
-    io_rw_32 gpio_out;
-    io_wo_32 gpio_set;
-    io_wo_32 gpio_clr;
-    io_wo_32 gpio_togl;
+#define TIMER_TIMERAWL_OFFSET 0x00000028
 
-    io_wo_32 gpio_oe;
-    io_wo_32 gpio_oe_set;
-    io_wo_32 gpio_oe_clr;
-    io_wo_32 gpio_oe_togl;
-
-    io_rw_32 gpio_hi_out;
-    io_wo_32 gpio_hi_set;
-    io_wo_32 gpio_hi_clr;
-    io_wo_32 gpio_hi_togl;
-
-    io_wo_32 gpio_hi_oe;
-    io_wo_32 gpio_hi_oe_set;
-    io_wo_32 gpio_hi_oe_clr;
-    io_wo_32 gpio_hi_oe_togl;
-
-    io_rw_32 fifo_st;
-    io_wo_32 fifo_wr;
-    io_ro_32 fifo_rd;
-    io_ro_32 spinlock_st;
-
-    io_rw_32 div_udividend;
-    io_rw_32 div_udivisor;
-    io_rw_32 div_sdividend;
-    io_rw_32 div_sdivisor;
-
-    io_rw_32 div_quotient;
-    io_rw_32 div_remainder;
-    io_rw_32 div_csr;
-
-    uint32_t _pad2;
-
-    interp_hw_t interp[2];
-} sio_hw_t;
-
-#define sio_hw ((sio_hw_t *)SIO_BASE)
-
-#define NUM_TIMERS 4
-
-typedef struct {
-    io_wo_32 timehw;
-    io_wo_32 timelw;
-    io_ro_32 timehr;
-    io_ro_32 timelr;
-    io_rw_32 alarm[NUM_TIMERS];
-    io_rw_32 armed;
-    io_ro_32 timerawh;
-    io_ro_32 timerawl;
-    io_rw_32 dbgpause;
-    io_rw_32 pause;
-    io_rw_32 intr;
-    io_rw_32 inte;
-    io_rw_32 intf;
-    io_ro_32 ints;
-} timer_hw_t;
-
-#define timer_hw ((timer_hw_t *const)TIMER_BASE)
+static io_ro_32 *const timer_timerawl = (io_ro_32*)(TIMER_BASE + TIMER_TIMERAWL_OFFSET);
 
 // --------------------------------------------------------------------------------------
 
-#define MY_GPIO_FUNC_SIO 5
+#define GPIO_FUNC_SIO 5
 
 // --------------------------------------------------------------------------------------
 
 #define MY_PICO_DEFAULT_LED_PIN 25
 
-void my_gpio_set_function(uint32_t gpio, uint32_t fn) {
+void gpio_init_as_sio_output(uint32_t gpio) {
     // Set input enable on, output disable off
-    padsbank0_hw->io[gpio] = (padsbank0_hw->io[gpio] & (PADS_BANK0_GPIO0_IE_BITS | PADS_BANK0_GPIO0_OD_BITS)) | PADS_BANK0_GPIO0_IE_BITS;
+    padsbank0_io[gpio] = (padsbank0_io[gpio] & (PADS_BANK0_GPIO0_IE_BITS | PADS_BANK0_GPIO0_OD_BITS)) | PADS_BANK0_GPIO0_IE_BITS;
 
     // Zero all fields apart from fsel; we want this IO to do what the peripheral tells it.
     // This doesn't affect e.g. pullup/pulldown, as these are in pad controls.
-    iobank0_hw->io[gpio].ctrl = fn << IO_BANK0_GPIO0_CTRL_FUNCSEL_LSB;
-}
+    iobank0_io[gpio].ctrl = GPIO_FUNC_SIO << IO_BANK0_GPIO0_CTRL_FUNCSEL_LSB;
 
-void my_gpio_init(uint32_t gpio) {
-    sio_hw->gpio_oe_clr = 1ul << gpio;
-    sio_hw->gpio_clr = 1ul << gpio;
-    my_gpio_set_function(gpio, MY_GPIO_FUNC_SIO);
-}
-
-void my_gpio_set_dir_out(uint32_t gpio) {
-    sio_hw->gpio_oe_set = 1ul << gpio;
+    // Setup GPIO as output
+    *sio_gpio_out_clr = 1ul << gpio;
+    *sio_gpio_oe_set = 1ul << gpio;
 }
 
 void my_gpio_put(uint32_t gpio, bool value) {
     uint32_t mask = 1ul << gpio;
     if (value)
-        sio_hw->gpio_set = mask;
+        *sio_gpio_out_set = mask;
     else
-        sio_hw->gpio_clr = mask;
-}
-
-uint32_t my_time_us_32() {
-    return timer_hw->timerawl;
+        *sio_gpio_out_clr = mask;
 }
 
 void my_sleep_ms(uint32_t delay_ms) {
-    uint32_t base = my_time_us_32();
-    while ((int64_t)(my_time_us_32() - base) < (delay_ms * 1000)) {
+    uint32_t base = *timer_timerawl;
+    while ((*timer_timerawl - base) < (delay_ms * 1000)) {
     }
 }
 
 int main() {
     const uint32_t LED_PIN = MY_PICO_DEFAULT_LED_PIN;
-    my_gpio_init(LED_PIN);
-    my_gpio_set_dir_out(LED_PIN);
+    gpio_init_as_sio_output(LED_PIN);
     while (true) {
         my_gpio_put(LED_PIN, 1);
-        my_sleep_ms(500);
+        my_sleep_ms(1000);
         my_gpio_put(LED_PIN, 0);
         my_sleep_ms(500);
     }
