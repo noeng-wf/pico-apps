@@ -25,3 +25,21 @@ target_link_libraries(blink pico_stdlib)
 
 # create map/bin/hex file etc.
 pico_add_extra_outputs(blink)
+
+#
+# Rust content
+#
+
+set(Rust_CARGO_TARGET thumbv6m-none-eabi)
+
+include(FetchContent)
+
+FetchContent_Declare(
+    Corrosion
+    GIT_REPOSITORY https://github.com/AndrewGaspar/corrosion.git
+    GIT_TAG origin/master
+)
+FetchContent_MakeAvailable(Corrosion)
+
+corrosion_import_crate(MANIFEST_PATH rust-lib/Cargo.toml)
+target_link_libraries(blink rust-lib)

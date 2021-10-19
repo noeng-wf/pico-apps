@@ -7,6 +7,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "rust-lib/rust-lib.h"
+
 // --------------------------------------------------------------------------------------
 
 typedef volatile uint32_t io_rw_32;
@@ -85,12 +87,14 @@ void my_sleep_ms(uint32_t delay_ms) {
 }
 
 int main() {
+    const uint32_t DELAY_MS = get_delay_value(); // Call Rust code
+
     const uint32_t LED_PIN = MY_PICO_DEFAULT_LED_PIN;
     gpio_init_as_sio_output(LED_PIN);
     while (true) {
         my_gpio_put(LED_PIN, 1);
-        my_sleep_ms(1000);
+        my_sleep_ms(DELAY_MS);
         my_gpio_put(LED_PIN, 0);
-        my_sleep_ms(500);
+        my_sleep_ms(DELAY_MS);
     }
 }
