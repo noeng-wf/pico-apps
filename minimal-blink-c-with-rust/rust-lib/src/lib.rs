@@ -27,7 +27,7 @@ const PICO_DEFAULT_LED_PIN: usize = 25;
 #[repr(C)]
 struct IoBank0HwIo {
     status: u32,
-    ctrl: u32
+    ctrl: u32,
 }
 
 struct Peripherals {
@@ -36,29 +36,43 @@ struct Peripherals {
     sio_gpio_out_set: *mut u32,
     sio_gpio_out_clr: *mut u32,
     sio_gpio_oe_set: *mut u32,
-    timer_timerawl: *const u32
+    timer_timerawl: *const u32,
 }
 
 impl Peripherals {
     fn new() -> Self {
         Self {
-            iobank0_io: (IO_BANK0_BASE + IO_BANK0_GPIO0_STATUS_OFFSET) as *mut [IoBank0HwIo; NUMBER_OF_GPIOS],
-            padsbank0_io: (PADS_BANK0_BASE + PADS_BANK0_GPIO0_OFFSET) as *mut [u32; NUMBER_OF_GPIOS],
+            iobank0_io: (IO_BANK0_BASE + IO_BANK0_GPIO0_STATUS_OFFSET)
+                as *mut [IoBank0HwIo; NUMBER_OF_GPIOS],
+            padsbank0_io: (PADS_BANK0_BASE + PADS_BANK0_GPIO0_OFFSET)
+                as *mut [u32; NUMBER_OF_GPIOS],
             sio_gpio_out_set: (SIO_BASE + SIO_GPIO_OUT_SET_OFFSET) as *mut u32,
             sio_gpio_out_clr: (SIO_BASE + SIO_GPIO_OUT_CLR_OFFSET) as *mut u32,
             sio_gpio_oe_set: (SIO_BASE + SIO_GPIO_OE_SET_OFFSET) as *mut u32,
-            timer_timerawl: (TIMER_BASE + TIMER_TIMERAWL_OFFSET) as *const u32
+            timer_timerawl: (TIMER_BASE + TIMER_TIMERAWL_OFFSET) as *const u32,
         }
     }
 }
 
 fn gpio_init_as_sio_output(p: &Peripherals, gpio: usize) {
     // Set input enable on, output disable off
-    unsafe { core::ptr::write_volatile(&mut (*p.padsbank0_io)[gpio], (core::ptr::read_volatile(&(*p.padsbank0_io)[gpio]) & (PADS_BANK0_GPIO0_IE_BITS | PADS_BANK0_GPIO0_OD_BITS)) | PADS_BANK0_GPIO0_IE_BITS) };
+    unsafe {
+        core::ptr::write_volatile(
+            &mut (*p.padsbank0_io)[gpio],
+            (core::ptr::read_volatile(&(*p.padsbank0_io)[gpio])
+                & (PADS_BANK0_GPIO0_IE_BITS | PADS_BANK0_GPIO0_OD_BITS))
+                | PADS_BANK0_GPIO0_IE_BITS,
+        )
+    };
 
     // Zero all fields apart from fsel; we want this IO to do what the peripheral tells it.
     // This doesn't affect e.g. pullup/pulldown, as these are in pad controls.
-    unsafe { core::ptr::write_volatile(&mut (*p.iobank0_io)[gpio].ctrl, GPIO_FUNC_SIO << IO_BANK0_GPIO0_CTRL_FUNCSEL_LSB) };
+    unsafe {
+        core::ptr::write_volatile(
+            &mut (*p.iobank0_io)[gpio].ctrl,
+            GPIO_FUNC_SIO << IO_BANK0_GPIO0_CTRL_FUNCSEL_LSB,
+        )
+    };
 
     // Setup GPIO as output
     unsafe { core::ptr::write_volatile(p.sio_gpio_out_clr, 1 << gpio) };
@@ -76,12 +90,11 @@ fn gpio_put(p: &Peripherals, gpio: usize, value: bool) {
 
 fn sleep_ms(p: &Peripherals, delay_ms: u32) {
     let base = unsafe { core::ptr::read_volatile(p.timer_timerawl) };
-    while (unsafe { core::ptr::read_volatile(p.timer_timerawl) } - base) < (delay_ms * 1000) {
-    }
+    while (unsafe { core::ptr::read_volatile(p.timer_timerawl) } - base) < (delay_ms * 1000) {}
 }
 
 #[no_mangle]
-pub extern fn rust_main() -> ! {
+pub extern "C" fn rust_main() -> ! {
     let p = Peripherals::new();
     const LED_PIN: usize = PICO_DEFAULT_LED_PIN;
 
