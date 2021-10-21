@@ -1,6 +1,8 @@
 const NUMBER_OF_GPIOS: usize = 30;
 
 const RESETS_BASE: usize = 0x4000c000;
+const CLOCKS_BASE: usize = 0x40008000;
+const XOSC_BASE: usize = 0x40024000;
 const IO_BANK0_BASE: usize = 0x40014000;
 const PADS_BANK0_BASE: usize = 0x4001c000;
 const SIO_BASE: usize = 0xd0000000;
@@ -8,6 +10,10 @@ const TIMER_BASE: usize = 0x40054000;
 
 const RESETS_RESET_OFFSET: usize = 0x00000000;
 const RESETS_RESET_DONE_OFFSET: usize = 0x00000008;
+const CLOCKS_CLK_REF_CTRL_OFFSET: usize = 0x00000030;
+const XOSC_CTRL_OFFSET: usize = 0x00000000;
+const XOSC_STATUS_OFFSET: usize = 0x00000004;
+
 const IO_BANK0_GPIO0_STATUS_OFFSET: usize = 0x00000000;
 const PADS_BANK0_GPIO0_OFFSET: usize = 0x00000004;
 const SIO_GPIO_OUT_SET_OFFSET: usize = 0x00000014;
@@ -41,6 +47,18 @@ const RESETS_RESET_IO_BANK0_BITS: u32 = 0x00000020;
 //const RESETS_RESET_BUSCTRL_BITS: u32 = 0x00000002;
 //const RESETS_RESET_ADC_BITS: u32 = 0x00000001;
 
+const CLOCKS_CLK_REF_CTRL_SRC_BITS: u32 = 0x00000003;
+const CLOCKS_CLK_REF_CTRL_SRC_LSB: u32 = 0;
+//const CLOCKS_CLK_REF_CTRL_SRC_VALUE_ROSC_CLKSRC_PH: u32 = 0x0;
+//const CLOCKS_CLK_REF_CTRL_SRC_VALUE_CLKSRC_CLK_REF_AUX: u32 = 0x1;
+const CLOCKS_CLK_REF_CTRL_SRC_VALUE_XOSC_CLKSRC: u32 = 0x2;
+
+const XOSC_CTRL_ENABLE_BITS: u32 = 0x00fff000;
+const XOSC_CTRL_ENABLE_LSB: u32 = 12;
+//const XOSC_CTRL_ENABLE_VALUE_DISABLE: u32 = 0xd1e;
+const XOSC_CTRL_ENABLE_VALUE_ENABLE: u32 = 0xfab;
+const XOSC_STATUS_STABLE_BITS: u32 = 0x80000000;
+
 const PADS_BANK0_GPIO0_IE_BITS: u32 = 0x00000040;
 const PADS_BANK0_GPIO0_OD_BITS: u32 = 0x00000080;
 const IO_BANK0_GPIO0_CTRL_FUNCSEL_LSB: u32 = 0;
@@ -58,6 +76,9 @@ struct IoBank0HwIo {
 struct Peripherals {
     resets_reset: *mut u32,
     resets_reset_done: *const u32,
+    clocks_clk_ref_ctrl: *mut u32,
+    xosc_ctrl: *mut u32,
+    xosc_status: *const u32,
     iobank0_io: *mut [IoBank0HwIo; NUMBER_OF_GPIOS],
     padsbank0_io: *mut [u32; NUMBER_OF_GPIOS],
     sio_gpio_out_set: *mut u32,
@@ -71,6 +92,9 @@ impl Peripherals {
         Self {
             resets_reset: (RESETS_BASE + RESETS_RESET_OFFSET) as *mut u32,
             resets_reset_done: (RESETS_BASE + RESETS_RESET_DONE_OFFSET) as *const u32,
+            clocks_clk_ref_ctrl: (CLOCKS_BASE + CLOCKS_CLK_REF_CTRL_OFFSET) as *mut u32,
+            xosc_ctrl: (XOSC_BASE + XOSC_CTRL_OFFSET) as *mut u32,
+            xosc_status: (XOSC_BASE + XOSC_STATUS_OFFSET) as *const u32,
             iobank0_io: (IO_BANK0_BASE + IO_BANK0_GPIO0_STATUS_OFFSET)
                 as *mut [IoBank0HwIo; NUMBER_OF_GPIOS],
             padsbank0_io: (PADS_BANK0_BASE + PADS_BANK0_GPIO0_OFFSET)
@@ -81,6 +105,18 @@ impl Peripherals {
             timer_timerawl: (TIMER_BASE + TIMER_TIMERAWL_OFFSET) as *const u32,
         }
     }
+}
+
+fn switch_to_xosc(p: &Peripherals) {
+    unsafe {
+        // Enable crystal oscillator
+        core::ptr::write_volatile(p.xosc_ctrl, core::ptr::read_volatile(p.xosc_ctrl) & !XOSC_CTRL_ENABLE_BITS | (XOSC_CTRL_ENABLE_VALUE_ENABLE << XOSC_CTRL_ENABLE_LSB));
+        // Wait until crystal oscillator stable
+        while (core::ptr::read_volatile(p.xosc_status) & XOSC_STATUS_STABLE_BITS) == 0 {}
+
+        // Switch clk_ref to crystal oscillator
+        core::ptr::write_volatile(p.clocks_clk_ref_ctrl, core::ptr::read_volatile(p.clocks_clk_ref_ctrl) & !CLOCKS_CLK_REF_CTRL_SRC_BITS | (CLOCKS_CLK_REF_CTRL_SRC_VALUE_XOSC_CLKSRC << CLOCKS_CLK_REF_CTRL_SRC_LSB));
+    };
 }
 
 fn start_subsystems(p: &Peripherals) {
@@ -139,6 +175,7 @@ pub fn blink_loop() -> ! {
     let p = Peripherals::new();
     const LED_PIN: usize = PICO_DEFAULT_LED_PIN;
 
+    switch_to_xosc(&p);
     start_subsystems(&p);
     gpio_init_as_sio_output(&p, LED_PIN);
     loop {
