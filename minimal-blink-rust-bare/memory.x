@@ -21,6 +21,9 @@ SECTIONS {
 
        /* Second entry: reset vector */
        KEEP(*(.vector_table.reset_vector));
+
+       /* Remaining entries: other exceptions */
+       KEEP(*(.vector_table.exceptions));
     } > FLASH
 
     .text :
