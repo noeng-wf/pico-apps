@@ -1,6 +1,17 @@
 #![no_std]
 #![no_main]
 
+//
+// Note:
+// The resulting ELF file after the build must be converted into a UF2 file,
+// e.g. with the elf2uf2 tool from the Pico SDK.
+//
+// See: https://github.com/raspberrypi/pico-sdk/tree/master/tools/elf2uf2
+// (this sub directory can be built separately with CMake)
+//
+
+mod blink;
+
 // Second stage boot loader
 #[link_section = ".boot2"]
 #[used]
@@ -75,8 +86,7 @@ pub extern "C" fn DefaultExceptionHandler() {
 
 #[no_mangle]
 pub unsafe extern "C" fn Reset() -> ! {
-    let _x = 42;
-    loop {}
+    blink::blink_loop();
 }
 
 #[panic_handler]
