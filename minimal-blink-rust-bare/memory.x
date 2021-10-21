@@ -4,12 +4,24 @@ MEMORY {
     RAM   : ORIGIN = 0x20000000, LENGTH = 256K
 }
 
+/* The entry point is the reset handler */
+ENTRY(Reset);
+
 SECTIONS {
     /* ### Boot loader */
     .boot2 ORIGIN(BOOT2) :
     {
         KEEP(*(.boot2));
     } > BOOT2
+
+    .vector_table ORIGIN(FLASH) :
+    {
+       /* First entry: initial Stack Pointer value */
+       LONG(ORIGIN(RAM) + LENGTH(RAM));
+
+       /* Second entry: reset vector */
+       KEEP(*(.vector_table.reset_vector));
+    } > FLASH
 
     .text :
     {
