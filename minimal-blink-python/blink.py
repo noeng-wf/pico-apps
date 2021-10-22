@@ -1,0 +1,1 @@
+# Copy+paste this text (including the empty lines at the end) into a terminal window of the USB serial connection.from machine import Pinimport timeled = Pin(25, Pin.OUT)while True:led.value(1)time.sleep_ms(500)led.value(0)time.sleep_ms(500)
