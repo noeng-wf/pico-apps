@@ -15,13 +15,8 @@
 // The macro for our start-up function
 use cortex_m_rt::entry;
 
-use cortex_m::prelude::*;
-
 // GPIO traits
 use embedded_hal::digital::v2::OutputPin;
-
-// Traits for converting integers to amounts of time
-use embedded_time::duration::Extensions;
 
 // Ensure we halt the program on panic (if we don't mention this crate it won't
 // be linked)
@@ -38,6 +33,11 @@ use pico::hal;
 #[link_section = ".boot2"]
 #[used]
 pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
+
+fn sleep_ms(timer: &hal::timer::Timer, delay_ms: u32) {
+    let base = timer.get_counter_low();
+    while (timer.get_counter_low() - base) < (delay_ms * 1000) {}
+}
 
 #[entry]
 fn main() -> ! {
@@ -64,7 +64,6 @@ fn main() -> ! {
 
     // Configure the Timer peripheral in count-down mode
     let timer = hal::timer::Timer::new(pac.TIMER, &mut pac.RESETS);
-    let mut count_down = timer.count_down();
 
     // The single-cycle I/O block controls our GPIO pins
     let sio = hal::sio::Sio::new(pac.SIO);
@@ -83,12 +82,10 @@ fn main() -> ! {
     loop {
         // LED on, and wait for 500ms
         led_pin.set_high().unwrap();
-        count_down.start(500.milliseconds());
-        let _ = nb::block!(count_down.wait());
+        sleep_ms(&timer, 500);
 
         // LED off, and wait for 500ms
         led_pin.set_low().unwrap();
-        count_down.start(500.milliseconds());
-        let _ = nb::block!(count_down.wait());
+        sleep_ms(&timer, 500);
     }
 }
