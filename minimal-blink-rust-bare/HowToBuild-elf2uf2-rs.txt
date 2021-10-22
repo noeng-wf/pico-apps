@@ -1,0 +1,14 @@
+Note:
+The resulting ELF file after the build must be converted into a UF2 file.
+
+There is a tool named 'elf2uf2-rs'. Unfortunately it doesn't work on WSL because
+of a dependency on libudev.
+
+Workaround: Patch the Cargo.toml file of the tool to disable default features on
+the 'serialport' dependency.
+- Replace the line 'serialport = "4"' by 'serialport = { version = "4", default-features = false }'
+
+
+Alternatively the original tool from the Pico SDK can be used:
+https://github.com/raspberrypi/pico-sdk/tree/master/tools/elf2uf2
+(this sub directory can be built separately with CMake)
