@@ -4,9 +4,13 @@
 #![no_std]
 #![no_main]
 
+mod dot_matrix;
+
 use cortex_m_rt::entry;
 use pico::hal;
 use pico::hal::pac;
+
+use dot_matrix::DotMatrix;
 
 // Program shall halt on panic
 use panic_halt as _;
@@ -36,7 +40,38 @@ fn main() -> ! {
     .ok()
     .unwrap();
 
+    // Configure the Timer peripheral in count-down mode
+    let timer = hal::timer::Timer::new(pac.TIMER, &mut pac.RESETS);
+
+    // The single-cycle I/O block controls our GPIO pins
+    let sio = hal::sio::Sio::new(pac.SIO);
+
+    // Set the pins up according to their function on this particular board
+    let pins = pico::Pins::new(
+        pac.IO_BANK0,
+        pac.PADS_BANK0,
+        sio.gpio_bank0,
+        &mut pac.RESETS,
+    );
+
+    let mut output_enable_pin = pins.gpio13.into_push_pull_output();
+    let mut serial_data_pin = pins.gpio11.into_push_pull_output();
+    let mut clock_pin = pins.gpio10.into_push_pull_output();
+    let mut latch_pin = pins.gpio12.into_push_pull_output();
+    let mut address0_pin = pins.gpio16.into_push_pull_output();
+    let mut address1_pin = pins.gpio18.into_push_pull_output();
+    let mut address2_pin = pins.gpio22.into_push_pull_output();
+
+    let mut dot_matrix = DotMatrix::new(
+        &mut output_enable_pin,
+        &mut serial_data_pin,
+        &mut clock_pin,
+        &mut latch_pin,
+        [&mut address0_pin, &mut address1_pin, &mut address2_pin],
+        &timer,
+    );
+
     loop {
-        // Todo
+        dot_matrix.run();
     }
 }
