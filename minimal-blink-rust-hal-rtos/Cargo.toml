@@ -12,3 +12,7 @@ rp2040-boot2 = "0.2"
 panic-halt = "0.2"
 embedded-hal = "0.2"
 pico = { git = "https://github.com/rp-rs/rp-hal.git" }
+freertos-rust = "*"
+
+[build-dependencies]
+freertos-cargo-build = "*"
