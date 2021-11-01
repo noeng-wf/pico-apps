@@ -1,3 +1,5 @@
+#![allow(dead_code)] // Not all functionality here must be used.
+
 pub const RAW_WIDTH: usize = 32; // but only the lower 24 bits are connected to a column
 pub const RAW_HEIGHT: usize = 8;
 pub type RawData = [u32; RAW_HEIGHT];

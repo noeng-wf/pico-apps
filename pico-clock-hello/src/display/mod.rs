@@ -61,7 +61,7 @@ impl<'a> Display<'a> {
                 .unwrap();
             self.pins.clock.set_high().unwrap();
 
-            raw_data = raw_data >> 1;
+            raw_data >>= 1;
         }
 
         self.pins.latch.set_high().unwrap();
