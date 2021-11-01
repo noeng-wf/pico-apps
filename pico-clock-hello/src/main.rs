@@ -11,6 +11,10 @@ use cortex_m_rt::entry;
 use pico::hal;
 use pico::hal::pac;
 
+use ds323x::Ds323x;
+use ds323x::Hours;
+use embedded_time::rate::Extensions;
+
 use display::data::DOT_MATRIX_WIDTH;
 use display::Display;
 use text::TextBitmap;
@@ -31,7 +35,7 @@ fn main() -> ! {
 
     // Configure the clocks
     // The default is to generate a 125 MHz system clock
-    let _clocks = hal::clocks::init_clocks_and_plls(
+    let clocks = hal::clocks::init_clocks_and_plls(
         pico::XOSC_CRYSTAL_FREQ,
         pac.XOSC,
         pac.CLOCKS,
@@ -74,19 +78,32 @@ fn main() -> ! {
         address: [&mut address0_pin, &mut address1_pin, &mut address2_pin],
     });
 
+    // Pins for I2C
+    let sda_pin = pins.gpio6.into_mode::<hal::gpio::FunctionI2C>();
+    let scl_pin = pins.gpio7.into_mode::<hal::gpio::FunctionI2C>();
+
+    let i2c = hal::i2c::I2C::i2c1(
+        pac.I2C1,
+        sda_pin,
+        scl_pin,
+        400.kHz(),
+        &mut pac.RESETS,
+        clocks.peripheral_clock,
+    );
+    let mut rtc = Ds323x::new_ds3231(i2c);
+
     let mut scan_cycle = CycleGenerator::new(&timer, 1000);
     let mut animation_cycle = CycleGenerator::new(&timer, 120000);
-    let mut animation_step = 0;
 
-    let bitmap = TextBitmap::from_str("Hello world!").unwrap();
+    let text_bitmap = TextBitmap::from_str("Hello world!").unwrap();
+    let mut display_fsm = DisplayFsm::new(&text_bitmap, &mut rtc);
 
     loop {
         if animation_cycle.is_elapsed() {
             // Note:
             // This should only be called if the step counter actually changes to avoid too much CPU load
             // making visible varation of the scan cycle duration (causing slight LED flickering).
-            apply_display_step(&mut display, &bitmap, animation_step);
-            animation_step += 1;
+            display_fsm.next_step(&mut display);
         }
 
         if scan_cycle.is_elapsed() {
@@ -95,15 +112,133 @@ fn main() -> ! {
     }
 }
 
-fn apply_display_step(display: &mut Display, bitmap: &TextBitmap, step: u64) {
-    let bitmap_offset_min: isize = -(DOT_MATRIX_WIDTH as isize);
-    let bitmap_offset_max: isize = bitmap.width as isize;
+enum DisplayFsmState {
+    Time,
+    Text,
+}
 
-    let bitmap_offset =
-        bitmap_offset_min + (step % ((bitmap_offset_max - bitmap_offset_min + 1) as u64)) as isize;
-    let bitmap_segment = bitmap.segment(bitmap_offset, DOT_MATRIX_WIDTH);
-    let bitmap_data_u32 = bitmap_segment.data.map(|x| x as u32);
-    display.data.set_dot_matrix(&bitmap_data_u32);
+#[derive(PartialEq)]
+enum DisplayFsmStateResult {
+    Continue,
+    Done,
+}
+
+struct DisplayFsm<'a, 'b, RtccError> {
+    text_bitmap: &'a TextBitmap,
+    rtcc: &'b mut dyn ds323x::Rtcc<Error = RtccError>,
+    state: DisplayFsmState,
+    step: u64,
+}
+
+impl<'a, 'b, RtccError> DisplayFsm<'a, 'b, RtccError> {
+    fn new(text_bitmap: &'a TextBitmap, rtcc: &'b mut dyn ds323x::Rtcc<Error = RtccError>) -> Self {
+        Self {
+            text_bitmap,
+            rtcc,
+            state: DisplayFsmState::Time,
+            step: 0,
+        }
+    }
+
+    fn next_step(&mut self, display: &mut Display) {
+        match self.state {
+            DisplayFsmState::Time => {
+                if self.update_time(display, self.step) == DisplayFsmStateResult::Continue {
+                    self.step += 1;
+                } else {
+                    self.state = DisplayFsmState::Text;
+                    self.step = 0;
+                }
+            }
+            DisplayFsmState::Text => {
+                if self.update_text(display, self.step) == DisplayFsmStateResult::Continue {
+                    self.step += 1;
+                } else {
+                    self.state = DisplayFsmState::Time;
+                    self.step = 0;
+                }
+            }
+        }
+    }
+
+    fn update_time(&mut self, display: &mut Display, step: u64) -> DisplayFsmStateResult {
+        if let Some((hours, minutes)) = self.get_hours_and_minutes() {
+            let mut bitmap = TextBitmap::new();
+
+            // Hours
+            if hours >= 10 {
+                bitmap.append_char((0x30 + hours / 10) as char).unwrap();
+            } else {
+                bitmap.append_char(' ').unwrap();
+            }
+            bitmap.append_char((0x30 + hours % 10) as char).unwrap();
+
+            // Separator
+            bitmap.append_char(':').unwrap();
+
+            // Seconds
+            bitmap.append_char((0x30 + minutes / 10) as char).unwrap();
+            bitmap.append_char((0x30 + minutes % 10) as char).unwrap();
+
+            let bitmap_segment = bitmap.segment(0, DOT_MATRIX_WIDTH);
+            let bitmap_data_u32 = bitmap_segment.data.map(|x| x as u32);
+            display.data.set_dot_matrix(&bitmap_data_u32);
+        } else {
+            // Show nothing of communication with RTC fails.
+            display.data.clear();
+        }
+
+        if step < 40 {
+            DisplayFsmStateResult::Continue
+        } else {
+            DisplayFsmStateResult::Done
+        }
+    }
+
+    fn update_text(&mut self, display: &mut Display, step: u64) -> DisplayFsmStateResult {
+        let bitmap_offset_min: isize = -(DOT_MATRIX_WIDTH as isize);
+        let bitmap_offset_max: isize = self.text_bitmap.width as isize;
+
+        let bitmap_offset = bitmap_offset_min + (step as isize);
+        let bitmap_segment = self.text_bitmap.segment(bitmap_offset, DOT_MATRIX_WIDTH);
+        let bitmap_data_u32 = bitmap_segment.data.map(|x| x as u32);
+        display.data.set_dot_matrix(&bitmap_data_u32);
+
+        if bitmap_offset < bitmap_offset_max {
+            DisplayFsmStateResult::Continue
+        } else {
+            DisplayFsmStateResult::Done
+        }
+    }
+
+    fn get_hours_and_minutes(&mut self) -> Option<(u8, u8)> {
+        let hours;
+        let minutes;
+
+        if let Ok(value) = self.rtcc.get_hours() {
+            match value {
+                Hours::AM(x) => {
+                    hours = x;
+                }
+                Hours::PM(x) => {
+                    hours = x;
+                }
+                Hours::H24(x) => {
+                    hours = x;
+                }
+            }
+        } else {
+            return None;
+        }
+
+        if let Ok(value) = self.rtcc.get_minutes() {
+            minutes = value;
+        } else {
+            return None;
+        }
+
+        Some((hours, minutes))
+    }
 }
 
 struct CycleGenerator<'a> {

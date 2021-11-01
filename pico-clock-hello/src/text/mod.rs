@@ -17,11 +17,15 @@ pub struct TextBitmap {
 }
 
 impl TextBitmap {
-    pub fn from_str(text: &str) -> Result<Self, TextRenderError> {
-        let mut text_bitmap = Self {
+    pub fn new() -> Self {
+        Self {
             width: 0,
             data: [0; TEXT_BITMAP_HEIGHT],
-        };
+        }
+    }
+
+    pub fn from_str(text: &str) -> Result<Self, TextRenderError> {
+        let mut text_bitmap = Self::new();
         text_bitmap.append_text(text)?;
 
         Ok(text_bitmap)
@@ -29,13 +33,18 @@ impl TextBitmap {
 
     pub fn append_text(&mut self, text: &str) -> Result<(), TextRenderError> {
         for c in text.chars() {
-            if let Some(x) = DEFAULT_FONT.get_character(c) {
-                self.append_character(x)?;
-            } else {
-                return Err(TextRenderError::UnsupportedCharacter);
-            }
+            self.append_char(c)?;
         }
         Ok(())
+    }
+
+    pub fn append_char(&mut self, c: char) -> Result<(), TextRenderError> {
+        if let Some(x) = DEFAULT_FONT.get_character(c) {
+            self.append_font_character(x)?;
+            Ok(())
+        } else {
+            Err(TextRenderError::UnsupportedCharacter)
+        }
     }
 
     /// Extracts a horizontal segment from an instance.
@@ -68,15 +77,20 @@ impl TextBitmap {
         result
     }
 
-    fn append_character(&mut self, character: &font::FontCharacter) -> Result<(), TextRenderError> {
-        if self.width + CHARACTER_GAP + (character.width as usize) > 128 {
+    fn append_font_character(
+        &mut self,
+        character: &font::FontCharacter,
+    ) -> Result<(), TextRenderError> {
+        let gap = if self.width > 0 { CHARACTER_GAP } else { 0 };
+
+        if self.width + gap + (character.width as usize) > 128 {
             return Err(TextRenderError::TextTooLong);
         }
 
         for row in 0..TEXT_BITMAP_HEIGHT {
-            self.data[row] |= (character.bit_pattern[row] as u128) << (self.width + CHARACTER_GAP);
+            self.data[row] |= (character.bit_pattern[row] as u128) << (self.width + gap);
         }
-        self.width += CHARACTER_GAP + (character.width as usize);
+        self.width += gap + (character.width as usize);
 
         Ok(())
     }
