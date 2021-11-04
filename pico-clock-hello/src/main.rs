@@ -61,21 +61,12 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
-    // Pins for the LED display
-    let mut output_disable_pin = pins.gpio13.into_push_pull_output();
-    let mut serial_data_pin = pins.gpio11.into_push_pull_output();
-    let mut clock_pin = pins.gpio10.into_push_pull_output();
-    let mut latch_pin = pins.gpio12.into_push_pull_output();
-    let mut address0_pin = pins.gpio16.into_push_pull_output();
-    let mut address1_pin = pins.gpio18.into_push_pull_output();
-    let mut address2_pin = pins.gpio22.into_push_pull_output();
-
     let mut display = Display::new(display::pins::Pins {
-        output_disable: &mut output_disable_pin,
-        serial_data: &mut serial_data_pin,
-        clock: &mut clock_pin,
-        latch: &mut latch_pin,
-        address: [&mut address0_pin, &mut address1_pin, &mut address2_pin],
+        output_disable: pins.gpio13.into(),
+        serial_data: pins.gpio11.into(),
+        clock: pins.gpio10.into(),
+        latch: pins.gpio12.into(),
+        address: [pins.gpio16.into(), pins.gpio18.into(), pins.gpio22.into()],
     });
 
     // Pins for I2C

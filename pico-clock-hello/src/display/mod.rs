@@ -4,21 +4,30 @@
 pub mod data;
 pub mod pins;
 
+use embedded_hal::digital::v2::OutputPin;
 use embedded_hal::digital::v2::PinState;
 
 use crate::display::data::{Data, RAW_HEIGHT, RAW_WIDTH};
 use crate::display::pins::Pins;
 
 /// Abstraction of the dot matrix LED display.
-pub struct Display<'a> {
-    pins: Pins<'a>,
+pub struct Display {
+    pins: Pins,
     pub data: Data,
 
     scan_row: usize,
 }
 
-impl<'a> Display<'a> {
-    pub fn new(pins: Pins<'a>) -> Self {
+impl Display {
+    pub fn new(mut pins: Pins) -> Self {
+        pins.output_disable.into_push_pull_output();
+        pins.serial_data.into_push_pull_output();
+        pins.clock.into_push_pull_output();
+        pins.latch.into_push_pull_output();
+        pins.address
+            .iter_mut()
+            .for_each(|x| x.into_push_pull_output());
+
         // Disable output by default
         pins.output_disable.set_high().unwrap();
 

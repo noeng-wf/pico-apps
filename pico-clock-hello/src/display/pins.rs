@@ -1,20 +1,17 @@
 //! Set of pins to be used for the display.
 
-use core::convert::Infallible;
-use embedded_hal::digital::v2::OutputPin;
+use pico::hal::gpio::dynpin::DynPin;
 
-type OutPinRef<'a> = &'a mut dyn OutputPin<Error = Infallible>;
-
-/// Reference to the output pins.
-pub struct Pins<'a> {
+/// Output pins.
+pub struct Pins {
     // /OE
-    pub output_disable: OutPinRef<'a>,
+    pub output_disable: DynPin,
     // SDI
-    pub serial_data: OutPinRef<'a>,
+    pub serial_data: DynPin,
     // CLK
-    pub clock: OutPinRef<'a>,
+    pub clock: DynPin,
     // LE
-    pub latch: OutPinRef<'a>,
+    pub latch: DynPin,
     // A0..A2
-    pub address: [OutPinRef<'a>; 3],
+    pub address: [DynPin; 3],
 }
