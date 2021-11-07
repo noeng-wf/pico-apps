@@ -7,7 +7,7 @@
 mod display;
 mod text;
 
-use cortex_m_rt::entry;
+use cortex_m_rt::{entry, exception};
 use pico::hal;
 use pico::hal::pac;
 
@@ -30,6 +30,7 @@ pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 fn main() -> ! {
     // Peripherals
     let mut pac = pac::Peripherals::take().unwrap();
+    let mut core_pac = pac::CorePeripherals::take().unwrap();
     // Watchdog driver needed for clock setup
     let mut watchdog = hal::watchdog::Watchdog::new(pac.WATCHDOG);
 
@@ -46,6 +47,12 @@ fn main() -> ! {
     )
     .ok()
     .unwrap();
+
+    // Initialize SysTick interrupt with 1ms period
+    core_pac.SYST.set_reload(1000); // 1000us
+    core_pac.SYST.clear_current();
+    core_pac.SYST.enable_counter();
+    core_pac.SYST.enable_interrupt();
 
     // Configure the Timer peripheral in count-down mode
     let timer = hal::timer::Timer::new(pac.TIMER, &mut pac.RESETS);
@@ -83,7 +90,6 @@ fn main() -> ! {
     );
     let mut rtc = Ds323x::new_ds3231(i2c);
 
-    let mut scan_cycle = CycleGenerator::new(&timer, 1000);
     let mut animation_cycle = CycleGenerator::new(&timer, 120000);
 
     let text_bitmap = TextBitmap::from_str("Hello world!").unwrap();
@@ -96,11 +102,12 @@ fn main() -> ! {
             // making visible varation of the scan cycle duration (causing slight LED flickering).
             display_fsm.next_step(&mut display);
         }
-
-        if scan_cycle.is_elapsed() {
-            display.do_scan_cycle();
-        }
     }
+}
+
+#[exception]
+unsafe fn SysTick() {
+    Display::on_sys_tick_interrupt();
 }
 
 enum DisplayFsmState {
@@ -173,10 +180,10 @@ impl<'a, 'b, RtccError> DisplayFsm<'a, 'b, RtccError> {
 
             let bitmap_segment = bitmap.segment(0, DOT_MATRIX_WIDTH);
             let bitmap_data_u32 = bitmap_segment.data.map(|x| x as u32);
-            display.data.set_dot_matrix(&bitmap_data_u32);
+            display.modify_data(|x| x.set_dot_matrix(&bitmap_data_u32));
         } else {
             // Show nothing of communication with RTC fails.
-            display.data.clear();
+            display.modify_data(|x| x.clear());
         }
 
         if step < 40 {
@@ -193,7 +200,7 @@ impl<'a, 'b, RtccError> DisplayFsm<'a, 'b, RtccError> {
         let bitmap_offset = bitmap_offset_min + (step as isize);
         let bitmap_segment = self.text_bitmap.segment(bitmap_offset, DOT_MATRIX_WIDTH);
         let bitmap_data_u32 = bitmap_segment.data.map(|x| x as u32);
-        display.data.set_dot_matrix(&bitmap_data_u32);
+        display.modify_data(|x| x.set_dot_matrix(&bitmap_data_u32));
 
         if bitmap_offset < bitmap_offset_max {
             DisplayFsmStateResult::Continue
