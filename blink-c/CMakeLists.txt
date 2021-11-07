@@ -9,7 +9,7 @@ project(blink-c)
 pico_sdk_init()
 
 add_executable(blink-c
-        blink.c
+        main.c
         )
 
 # Pull in our pico_stdlib which pulls in commonly used features
