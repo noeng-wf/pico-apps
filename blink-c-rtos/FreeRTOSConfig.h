@@ -1,16 +1,12 @@
 #ifndef FREERTOS_CONFIG_H
 #define FREERTOS_CONFIG_H
 
-/* Here is a good place to include header files that are required across
-your application. */
-#include "something.h"
-
 #define configUSE_PREEMPTION                    1
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION 0
 #define configUSE_TICKLESS_IDLE                 0
-#define configCPU_CLOCK_HZ                      60000000
+#define configCPU_CLOCK_HZ                      125000000
 #define configSYSTICK_CLOCK_HZ                  1000000
-#define configTICK_RATE_HZ                      250
+#define configTICK_RATE_HZ                      1000
 #define configMAX_PRIORITIES                    5
 #define configMINIMAL_STACK_SIZE                128
 #define configMAX_TASK_NAME_LEN                 16
@@ -66,7 +62,7 @@ your application. */
 #define configMAX_API_CALL_INTERRUPT_PRIORITY   [dependent on processor and application]
 
 /* Define to trap errors during development. */
-#define configASSERT( ( x ) ) if( ( x ) == 0 ) vAssertCalled( __FILE__, __LINE__ )
+#define configASSERT(x) if( ( x ) == 0 ) { taskDISABLE_INTERRUPTS(); for( ;; ); }
 
 /* FreeRTOS MPU specific definitions. */
 #define configINCLUDE_APPLICATION_DEFINED_PRIVILEGED_FUNCTIONS 0
