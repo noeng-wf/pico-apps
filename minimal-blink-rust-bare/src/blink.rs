@@ -121,27 +121,44 @@ impl Peripherals {
 fn switch_to_xosc(p: &Peripherals) {
     unsafe {
         // Enable crystal oscillator
-        core::ptr::write_volatile(p.xosc_ctrl, core::ptr::read_volatile(p.xosc_ctrl) & !XOSC_CTRL_ENABLE_BITS | (XOSC_CTRL_ENABLE_VALUE_ENABLE << XOSC_CTRL_ENABLE_LSB));
+        core::ptr::write_volatile(
+            p.xosc_ctrl,
+            core::ptr::read_volatile(p.xosc_ctrl) & !XOSC_CTRL_ENABLE_BITS
+                | (XOSC_CTRL_ENABLE_VALUE_ENABLE << XOSC_CTRL_ENABLE_LSB),
+        );
         // Wait until crystal oscillator stable
         while (core::ptr::read_volatile(p.xosc_status) & XOSC_STATUS_STABLE_BITS) == 0 {}
 
         // Switch clk_ref to crystal oscillator (12 MHz)
-        core::ptr::write_volatile(p.clocks_clk_ref_ctrl, core::ptr::read_volatile(p.clocks_clk_ref_ctrl) & !CLOCKS_CLK_REF_CTRL_SRC_BITS | (CLOCKS_CLK_REF_CTRL_SRC_VALUE_XOSC_CLKSRC << CLOCKS_CLK_REF_CTRL_SRC_LSB));
+        core::ptr::write_volatile(
+            p.clocks_clk_ref_ctrl,
+            core::ptr::read_volatile(p.clocks_clk_ref_ctrl) & !CLOCKS_CLK_REF_CTRL_SRC_BITS
+                | (CLOCKS_CLK_REF_CTRL_SRC_VALUE_XOSC_CLKSRC << CLOCKS_CLK_REF_CTRL_SRC_LSB),
+        );
         // Divisor = 1
         core::ptr::write_volatile(p.clocks_clk_ref_div, 1 << CLOCKS_CLK_REF_DIV_INT_LSB);
 
         // Enable 1 us tick generation (dividing clk_ref by 12)
-        core::ptr::write_volatile(p.watchdog_tick, WATCHDOG_TICK_ENABLE_BITS | (12 << WATCHDOG_TICK_CYCLES_LSB));
+        core::ptr::write_volatile(
+            p.watchdog_tick,
+            WATCHDOG_TICK_ENABLE_BITS | (12 << WATCHDOG_TICK_CYCLES_LSB),
+        );
     }
 }
 
 fn start_subsystems(p: &Peripherals) {
     // Subsystems that will be used
-    let mask = RESETS_RESET_TIMER_BITS | RESETS_RESET_PIO0_BITS | RESETS_RESET_PADS_BANK0_BITS | RESETS_RESET_IO_BANK0_BITS;
+    let mask = RESETS_RESET_TIMER_BITS
+        | RESETS_RESET_PIO0_BITS
+        | RESETS_RESET_PADS_BANK0_BITS
+        | RESETS_RESET_IO_BANK0_BITS;
 
     unsafe {
         // Take subsystems out of reset state
-        core::ptr::write_volatile(p.resets_reset, core::ptr::read_volatile(p.resets_reset) & !mask);
+        core::ptr::write_volatile(
+            p.resets_reset,
+            core::ptr::read_volatile(p.resets_reset) & !mask,
+        );
 
         // Wait until reset state has been left
         while (core::ptr::read_volatile(p.resets_reset_done) & mask) != mask {}

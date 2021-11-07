@@ -22,17 +22,29 @@ fn switch_to_xosc(p: &mut Peripherals) {
     p.CLOCKS.clk_ref_div.write(|w| unsafe { w.int().bits(1) });
 
     // Enable 1 us tick generation (dividing clk_ref by 12)
-    p.WATCHDOG.tick.write(|w| unsafe { w.enable().set_bit().cycles().bits(12) });
+    p.WATCHDOG
+        .tick
+        .write(|w| unsafe { w.enable().set_bit().cycles().bits(12) });
 }
 
 fn start_subsystems(p: &mut Peripherals) {
     // Take used subsystems out of reset state
-    p.RESETS.reset.modify(|_r, w| w.pio0().clear_bit().pads_bank0().clear_bit().io_bank0().clear_bit());
+    p.RESETS.reset.modify(|_r, w| {
+        w.pio0()
+            .clear_bit()
+            .pads_bank0()
+            .clear_bit()
+            .io_bank0()
+            .clear_bit()
+    });
 
     // Wait until reset state has been left
     loop {
         let value = p.RESETS.reset_done.read();
-        if value.pio0().bit_is_set() && value.pads_bank0().bit_is_set() && value.io_bank0().bit_is_set() {
+        if value.pio0().bit_is_set()
+            && value.pads_bank0().bit_is_set()
+            && value.io_bank0().bit_is_set()
+        {
             break;
         }
     }

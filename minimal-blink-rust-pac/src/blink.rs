@@ -8,7 +8,9 @@ fn gpio_init_as_sio_output(p: &mut Peripherals, gpio: usize) {
 
     // Zero all fields apart from fsel; we want this IO to do what the peripheral tells it.
     // This doesn't affect e.g. pullup/pulldown, as these are in pad controls.
-    p.IO_BANK0.gpio[gpio].gpio_ctrl.write(|w| w.funcsel().sio_0());
+    p.IO_BANK0.gpio[gpio]
+        .gpio_ctrl
+        .write(|w| w.funcsel().sio_0());
 
     // Setup GPIO as output
     p.SIO.gpio_out_clr.write(|w| unsafe { w.bits(1 << gpio) });
