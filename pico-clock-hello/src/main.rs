@@ -107,7 +107,9 @@ fn main() -> ! {
 
 #[exception]
 unsafe fn SysTick() {
-    Display::on_sys_tick_interrupt();
+    static mut DISPLAY_SYS_TICK_CONTEXT: display::SysTickContext = display::SysTickContext::new();
+
+    Display::on_sys_tick_interrupt(DISPLAY_SYS_TICK_CONTEXT);
 }
 
 enum DisplayFsmState {
