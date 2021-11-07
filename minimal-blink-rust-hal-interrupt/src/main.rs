@@ -12,11 +12,16 @@
 #![no_std]
 #![no_main]
 
-// The macro for our start-up function
-use cortex_m_rt::entry;
+// Attributes for special functions
+use cortex_m_rt::{entry, exception};
+
+// Interrupt handler concurrency
+use core::cell::RefCell;
+use cortex_m::interrupt;
+use cortex_m::interrupt::Mutex;
 
 // GPIO traits
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::digital::v2::{OutputPin, PinState};
 
 // Ensure we halt the program on panic (if we don't mention this crate it won't
 // be linked)
@@ -29,20 +34,26 @@ use pico::hal::pac;
 // A shorter alias for the Hardware Abstraction Layer, which provides
 // higher-level drivers.
 use pico::hal;
+use pico::hal::gpio::dynpin::DynPin;
 
 #[link_section = ".boot2"]
 #[used]
 pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 
-fn sleep_ms(timer: &hal::timer::Timer, delay_ms: u32) {
-    let base = timer.get_counter_low();
-    while (timer.get_counter_low() - base) < (delay_ms * 1000) {}
+struct SysTickContext {
+    led_pin: DynPin,
+    period_ms: u32,
+    counter_ms: u32,
 }
+
+static SYS_TICK_INIT_CONTEXT: Mutex<RefCell<Option<SysTickContext>>> =
+    Mutex::new(RefCell::new(None));
 
 #[entry]
 fn main() -> ! {
     // Grab our singleton objects
     let mut pac = pac::Peripherals::take().unwrap();
+    let mut core_pac = pac::CorePeripherals::take().unwrap();
 
     // Set up the watchdog driver - needed by the clock setup code
     let mut watchdog = hal::watchdog::Watchdog::new(pac.WATCHDOG);
@@ -62,8 +73,11 @@ fn main() -> ! {
     .ok()
     .unwrap();
 
-    // Configure the Timer peripheral in count-down mode
-    let timer = hal::timer::Timer::new(pac.TIMER, &mut pac.RESETS);
+    // Initialize SysTick interrupt with 1ms period
+    core_pac.SYST.set_reload(1000); // 1000us
+    core_pac.SYST.clear_current();
+    core_pac.SYST.enable_counter();
+    core_pac.SYST.enable_interrupt();
 
     // The single-cycle I/O block controls our GPIO pins
     let sio = hal::sio::Sio::new(pac.SIO);
@@ -76,16 +90,41 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
-    let mut led_pin = pins.led.into_push_pull_output();
+    let led_pin = pins.led.into_push_pull_output();
+    interrupt::free(|cs| {
+        SYS_TICK_INIT_CONTEXT
+            .borrow(cs)
+            .replace(Some(SysTickContext {
+                led_pin: led_pin.into(),
+                period_ms: 500,
+                counter_ms: 0,
+            }));
+    });
 
-    // Blink the LED at 1 Hz
-    loop {
-        // LED on, and wait for 500ms
-        led_pin.set_high().unwrap();
-        sleep_ms(&timer, 500);
+    loop {}
+}
 
-        // LED off, and wait for 500ms
-        led_pin.set_low().unwrap();
-        sleep_ms(&timer, 500);
+#[exception]
+fn SysTick() {
+    static mut CONTEXT: Option<SysTickContext> = None;
+
+    if CONTEXT.is_none() {
+        interrupt::free(|cs| {
+            if let Some(init_context) = SYS_TICK_INIT_CONTEXT.borrow(cs).borrow_mut().take() {
+                CONTEXT.replace(init_context);
+            }
+        });
+    }
+
+    if let Some(context) = CONTEXT {
+        context
+            .led_pin
+            .set_state(if (context.counter_ms / context.period_ms) & 1 == 0 {
+                PinState::High
+            } else {
+                PinState::Low
+            })
+            .unwrap();
+        context.counter_ms += 1;
     }
 }
