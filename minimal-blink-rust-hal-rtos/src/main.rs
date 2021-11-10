@@ -17,6 +17,11 @@ mod freertos;
 // The macro for our start-up function
 use cortex_m_rt::entry;
 
+// Concurrency (not using FreeRTOS primitives yet)
+use core::cell::RefCell;
+use cortex_m::interrupt;
+use cortex_m::interrupt::Mutex;
+
 // GPIO traits
 use embedded_hal::digital::v2::OutputPin;
 
@@ -74,7 +79,15 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
-    let _led_pin = pins.led.into_push_pull_output();
+    let led_pin = pins.led.into_push_pull_output();
+
+    interrupt::free(|cs| {
+        LED_TASK_INIT_CONTEXT
+            .borrow(cs)
+            .replace(Some(LedTaskContext {
+                pin: led_pin.into(),
+            }));
+    });
 
     unsafe {
         let mut task_handle = 0 as freertos::TaskHandle; // not used
@@ -97,6 +110,33 @@ fn main() -> ! {
     loop {}
 }
 
+struct LedTaskContext {
+    pin: DynPin,
+}
+
+static LED_TASK_INIT_CONTEXT: Mutex<RefCell<Option<LedTaskContext>>> =
+    Mutex::new(RefCell::new(None));
+
 extern "C" fn led_task(_param: *mut c_void) {
-    todo!();
+    let mut context_option: Option<LedTaskContext> = None;
+    interrupt::free(|cs| {
+        context_option = LED_TASK_INIT_CONTEXT.borrow(cs).borrow_mut().take();
+    });
+
+    if let Some(mut context) = context_option {
+        // Blink the LED at 1 Hz
+        loop {
+            // LED on, and wait for 500ms
+            context.pin.set_high().unwrap();
+            unsafe {
+                freertos::vTaskDelay(500);
+            }
+
+            // LED off, and wait for 500ms
+            context.pin.set_low().unwrap();
+            unsafe {
+                freertos::vTaskDelay(500);
+            }
+        }
+    }
 }
