@@ -13,6 +13,8 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 
+use cmake::Config;
+
 fn main() {
     // Put `memory.x` in our output directory and ensure it's
     // on the linker search path.
@@ -28,4 +30,13 @@ fn main() {
     // here, we ensure the build script is only re-run when
     // `memory.x` is changed.
     println!("cargo:rerun-if-changed=memory.x");
+
+    // Include FreeRTOS, inspired by https://flames-of-code.netlify.app/blog/rust-and-cmake/
+    let freertos_build = Config::new("freertos").build();
+    println!(
+        "cargo:rustc-link-search=native={}",
+        freertos_build.display()
+    );
+    println!("cargo:rustc-link-lib=static=freertos");
+    println!("cargo:rerun-if-changed=freertos");
 }

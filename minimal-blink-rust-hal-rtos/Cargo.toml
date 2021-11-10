@@ -12,3 +12,6 @@ rp2040-boot2 = "0.2"
 panic-halt = "0.2"
 embedded-hal = "0.2"
 pico = { git = "https://github.com/rp-rs/rp-hal.git" }
+
+[build-dependencies]
+cmake = "0.1"
