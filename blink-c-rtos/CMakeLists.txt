@@ -13,22 +13,13 @@ add_executable(blink-c-rtos
 )
 
 # FreeRTOS
-FILE(GLOB FreeRTOS_src FreeRTOS-Kernel/*.c)
-add_library(FreeRTOS STATIC
-        ${FreeRTOS_src}
-        FreeRTOS-Kernel/portable/GCC/ARM_CM0/port.c
-        FreeRTOS-Kernel/portable/MemMang/heap_4.c
-)
-target_include_directories(FreeRTOS PUBLIC
-        .
-        FreeRTOS-Kernel/include
-        FreeRTOS-Kernel/portable/GCC/ARM_CM0
-)
+set(FREE_RTOS_CONFIG_H_PATH ${CMAKE_CURRENT_SOURCE_DIR})
+add_subdirectory(../freertos-lib freertos-lib)
 
 # Pull in our pico_stdlib which pulls in commonly used features
 target_link_libraries(blink-c-rtos
         pico_stdlib
-        FreeRTOS
+        freertos
 )
 
 # create map/bin/hex file etc.
