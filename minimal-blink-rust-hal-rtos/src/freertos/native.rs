@@ -7,6 +7,10 @@ pub type TaskHandle = *mut TaskControlBlock;
 
 #[link(name = "freertos", kind = "static")]
 extern "C" {
+    // Expose FreeRTOS internal dynamic memory allocation
+    // (as a helper to deal with closures in the Task abstraction)
+    pub fn pvPortMalloc(wanted_size: usize) -> *mut c_void;
+
     // Should be 32 bit, except if configUSE_16_BIT_TICKS is set to 1
     pub fn vTaskDelay(xTicksToDelay: u32);
 
@@ -19,5 +23,5 @@ extern "C" {
         task_param: *mut c_void,
         priority: u32,
         task_handle: *mut TaskHandle,
-    );
+    ) -> i32;
 }

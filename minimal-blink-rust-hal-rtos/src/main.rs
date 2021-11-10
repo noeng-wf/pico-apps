@@ -17,11 +17,6 @@ mod freertos;
 // The macro for our start-up function
 use cortex_m_rt::entry;
 
-// Concurrency (not using FreeRTOS primitives yet)
-use core::cell::RefCell;
-use cortex_m::interrupt;
-use cortex_m::interrupt::Mutex;
-
 // GPIO traits
 use embedded_hal::digital::v2::OutputPin;
 
@@ -36,10 +31,9 @@ use pico::hal::pac;
 // A shorter alias for the Hardware Abstraction Layer, which provides
 // higher-level drivers.
 use pico::hal;
-use pico::hal::gpio::dynpin::DynPin;
 
-// FFI
-use core::ffi::c_void;
+// Time
+use embedded_time::duration::Milliseconds;
 
 #[link_section = ".boot2"]
 #[used]
@@ -79,64 +73,19 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
-    let led_pin = pins.led.into_push_pull_output();
+    let mut led_pin = pins.led.into_push_pull_output();
 
-    interrupt::free(|cs| {
-        LED_TASK_INIT_CONTEXT
-            .borrow(cs)
-            .replace(Some(LedTaskContext {
-                pin: led_pin.into(),
-            }));
-    });
-
-    unsafe {
-        let mut task_handle = 0 as freertos::TaskHandle; // not used
-
-        freertos::xTaskCreate(
-            led_task,
-            "led_task\0".as_ptr(),
-            1024,
-            0 as *mut c_void,
-            1,
-            &mut task_handle,
-        );
-    }
-
-    unsafe {
-        freertos::vTaskStartScheduler();
-    }
-
-    // Should not be reached
-    loop {}
-}
-
-struct LedTaskContext {
-    pin: DynPin,
-}
-
-static LED_TASK_INIT_CONTEXT: Mutex<RefCell<Option<LedTaskContext>>> =
-    Mutex::new(RefCell::new(None));
-
-extern "C" fn led_task(_param: *mut c_void) {
-    let mut context_option: Option<LedTaskContext> = None;
-    interrupt::free(|cs| {
-        context_option = LED_TASK_INIT_CONTEXT.borrow(cs).borrow_mut().take();
-    });
-
-    if let Some(mut context) = context_option {
-        // Blink the LED at 1 Hz
+    freertos::create_task(move || {
         loop {
             // LED on, and wait for 500ms
-            context.pin.set_high().unwrap();
-            unsafe {
-                freertos::vTaskDelay(500);
-            }
+            led_pin.set_high().unwrap();
+            freertos::delay(Milliseconds(500));
 
             // LED off, and wait for 500ms
-            context.pin.set_low().unwrap();
-            unsafe {
-                freertos::vTaskDelay(500);
-            }
+            led_pin.set_low().unwrap();
+            freertos::delay(Milliseconds(500));
         }
-    }
+    }, &freertos::TaskParameters { name: "LED task", stack_depth: 1024, priority: 1 });
+
+    freertos::start_scheduler();
 }
