@@ -12,6 +12,8 @@
 #![no_std]
 #![no_main]
 
+mod freertos;
+
 // The macro for our start-up function
 use cortex_m_rt::entry;
 
@@ -29,15 +31,14 @@ use pico::hal::pac;
 // A shorter alias for the Hardware Abstraction Layer, which provides
 // higher-level drivers.
 use pico::hal;
+use pico::hal::gpio::dynpin::DynPin;
+
+// FFI
+use core::ffi::c_void;
 
 #[link_section = ".boot2"]
 #[used]
 pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
-
-fn sleep_ms(timer: &hal::timer::Timer, delay_ms: u32) {
-    let base = timer.get_counter_low();
-    while (timer.get_counter_low() - base) < (delay_ms * 1000) {}
-}
 
 #[entry]
 fn main() -> ! {
@@ -62,9 +63,6 @@ fn main() -> ! {
     .ok()
     .unwrap();
 
-    // Configure the Timer peripheral in count-down mode
-    let timer = hal::timer::Timer::new(pac.TIMER, &mut pac.RESETS);
-
     // The single-cycle I/O block controls our GPIO pins
     let sio = hal::sio::Sio::new(pac.SIO);
 
@@ -76,16 +74,29 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
-    let mut led_pin = pins.led.into_push_pull_output();
+    let _led_pin = pins.led.into_push_pull_output();
 
-    // Blink the LED at 1 Hz
-    loop {
-        // LED on, and wait for 500ms
-        led_pin.set_high().unwrap();
-        sleep_ms(&timer, 500);
+    unsafe {
+        let mut task_handle = 0 as freertos::TaskHandle; // not used
 
-        // LED off, and wait for 500ms
-        led_pin.set_low().unwrap();
-        sleep_ms(&timer, 500);
+        freertos::xTaskCreate(
+            led_task,
+            "led_task\0".as_ptr(),
+            1024,
+            0 as *mut c_void,
+            1,
+            &mut task_handle,
+        );
     }
+
+    unsafe {
+        freertos::vTaskStartScheduler();
+    }
+
+    // Should not be reached
+    loop {}
+}
+
+extern "C" fn led_task(_param: *mut c_void) {
+    todo!();
 }

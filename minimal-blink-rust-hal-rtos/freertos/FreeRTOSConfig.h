@@ -5,7 +5,7 @@
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION 0
 #define configUSE_TICKLESS_IDLE                 0
 #define configCPU_CLOCK_HZ                      125000000
-#define configSYSTICK_CLOCK_HZ                  1000000
+#define configSYSTICK_CLOCK_HZ                  1000
 #define configTICK_RATE_HZ                      1000
 #define configMAX_PRIORITIES                    5
 #define configMINIMAL_STACK_SIZE                128
@@ -93,9 +93,9 @@
 #define INCLUDE_xTaskGetHandle                  0
 #define INCLUDE_xTaskResumeFromISR              1
 
-#define vPortSVCHandler isr_svcall
-#define xPortPendSVHandler isr_pendsv
-#define xPortSysTickHandler isr_systick
+#define vPortSVCHandler SVCall
+#define xPortPendSVHandler PendSV
+#define xPortSysTickHandler SysTick
 
 /* A header file that defines trace macro can be included here. */
 
