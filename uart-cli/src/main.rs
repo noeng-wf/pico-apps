@@ -1,22 +1,10 @@
-// Code copied from https://github.com/rp-rs/rp-hal/blob/main/boards/pico/examples/pico_countdown_blinky.rs
-
-//! # Pico Countdown Blinky Example
-//!
-//! Blinks the LED on a Pico board, using an RP2040 Timer in Count-down mode.
-//!
-//! This will blink an LED attached to GP25, which is the pin the Pico uses for
-//! the on-board LED.
-//!
-//! See the `Cargo.toml` file for Copyright and licence details.
+// Parts of the code copied from https://github.com/rp-rs/rp-hal/blob/main/rp2040-hal/examples/uart.rs
 
 #![no_std]
 #![no_main]
 
 // The macro for our start-up function
 use cortex_m_rt::entry;
-
-// GPIO traits
-use embedded_hal::digital::v2::OutputPin;
 
 // Ensure we halt the program on panic (if we don't mention this crate it won't
 // be linked)
@@ -29,6 +17,9 @@ use pico::hal::pac;
 // A shorter alias for the Hardware Abstraction Layer, which provides
 // higher-level drivers.
 use pico::hal;
+
+// Some traits we need
+use core::fmt::Write;
 
 #[link_section = ".boot2"]
 #[used]
@@ -50,7 +41,7 @@ fn main() -> ! {
     // Configure the clocks
     //
     // The default is to generate a 125 MHz system clock
-    let _clocks = hal::clocks::init_clocks_and_plls(
+    let clocks = hal::clocks::init_clocks_and_plls(
         pico::XOSC_CRYSTAL_FREQ,
         pac.XOSC,
         pac.CLOCKS,
@@ -76,16 +67,22 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
-    let mut led_pin = pins.led.into_push_pull_output();
+    let mut uart = hal::uart::UartPeripheral::<_, _>::enable(
+        pac.UART0,
+        &mut pac.RESETS,
+        hal::uart::common_configs::_115200_8_N_1,
+        clocks.peripheral_clock.into(),
+    )
+    .unwrap();
 
-    // Blink the LED at 1 Hz
+    // UART TX (characters sent from RP2040) on pin 1 (GPIO0)
+    let _tx_pin = pins.gpio0.into_mode::<hal::gpio::FunctionUart>();
+    // UART RX (characters reveived by RP2040) on pin 2 (GPIO1)
+    let _rx_pin = pins.gpio1.into_mode::<hal::gpio::FunctionUart>();
+
+    // Periodical write
     loop {
-        // LED on, and wait for 500ms
-        led_pin.set_high().unwrap();
-        sleep_ms(&timer, 500);
-
-        // LED off, and wait for 500ms
-        led_pin.set_low().unwrap();
-        sleep_ms(&timer, 500);
+        writeln!(uart, "Hello world!\r").unwrap();
+        sleep_ms(&timer, 1000);
     }
 }
