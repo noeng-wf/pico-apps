@@ -3,6 +3,8 @@
 #![no_std]
 #![no_main]
 
+mod cli;
+
 // The macro for our start-up function
 use cortex_m_rt::entry;
 
@@ -18,17 +20,9 @@ use pico::hal::pac;
 // higher-level drivers.
 use pico::hal;
 
-// Some traits we need
-use core::fmt::Write;
-
 #[link_section = ".boot2"]
 #[used]
 pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
-
-fn sleep_ms(timer: &hal::timer::Timer, delay_ms: u32) {
-    let base = timer.get_counter_low();
-    while (timer.get_counter_low() - base) < (delay_ms * 1000) {}
-}
 
 #[entry]
 fn main() -> ! {
@@ -80,9 +74,12 @@ fn main() -> ! {
     // UART RX (characters reveived by RP2040) on pin 2 (GPIO1)
     let _rx_pin = pins.gpio1.into_mode::<hal::gpio::FunctionUart>();
 
-    // Periodical write
-    loop {
-        writeln!(uart, "Hello world!\r").unwrap();
-        sleep_ms(&timer, 1000);
+    cli::run(&mut uart, &timer);
+}
+
+impl cli::Timer for hal::timer::Timer {
+    fn sleep_ms(&self, delay_ms: u32) {
+        let base = self.get_counter();
+        while (self.get_counter() - base) < ((delay_ms as u64) * 1000) {}
     }
 }
