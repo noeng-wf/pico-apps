@@ -10,6 +10,7 @@ add_library(freertos STATIC
         ${freertos_src}
         FreeRTOS-Kernel/portable/GCC/ARM_CM0/port.c
         FreeRTOS-Kernel/portable/MemMang/heap_4.c
+        freertos_helper.c
 )
 
 target_include_directories(freertos PUBLIC

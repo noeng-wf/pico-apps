@@ -75,17 +75,24 @@ fn main() -> ! {
 
     let mut led_pin = pins.led.into_push_pull_output();
 
-    freertos::create_task(move || {
-        loop {
-            // LED on, and wait for 500ms
-            led_pin.set_high().unwrap();
-            freertos::delay(Milliseconds(500));
+    freertos::create_task(
+        move || {
+            loop {
+                // LED on, and wait for 500ms
+                led_pin.set_high().unwrap();
+                freertos::delay(Milliseconds(500));
 
-            // LED off, and wait for 500ms
-            led_pin.set_low().unwrap();
-            freertos::delay(Milliseconds(500));
-        }
-    }, &freertos::TaskParameters { name: "LED task", stack_depth: 1024, priority: 1 });
+                // LED off, and wait for 500ms
+                led_pin.set_low().unwrap();
+                freertos::delay(Milliseconds(500));
+            }
+        },
+        &freertos::TaskParameters {
+            name: "LED task",
+            stack_depth: 1024,
+            priority: 1,
+        },
+    );
 
     freertos::start_scheduler();
 }

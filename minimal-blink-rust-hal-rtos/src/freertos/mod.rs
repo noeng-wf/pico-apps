@@ -11,11 +11,18 @@ pub struct TaskParameters<'a> {
     pub priority: u32,
 }
 
-pub fn create_task<F: FnOnce() + Send + 'static>(
-    task_func: F,
-    params: &TaskParameters
-) {
+pub fn create_task<F: FnOnce() + Send + 'static>(task_func: F, params: &TaskParameters) {
+    const MAX_NAME_LEN: usize = 15;
+
     unsafe {
+        assert!(native::freertos_sizeof_size_t() == core::mem::size_of::<usize>() as u8);
+        assert!(
+            native::freertos_sizeof_configSTACK_DEPTH_TYPE()
+                == core::mem::size_of_val(&params.stack_depth)
+        );
+        assert!(native::freertos_sizeof_BaseType_t() == core::mem::size_of_val(&params.priority));
+        assert!(native::freertos_configMAX_TASK_NAME_LEN() == MAX_NAME_LEN + 1);
+
         let raw_size = core::mem::size_of::<F>();
 
         let alloc_size;
@@ -46,13 +53,12 @@ pub fn create_task<F: FnOnce() + Send + 'static>(
         core::mem::forget(task_func);
 
         // Prepare null-terminated task name (assuming configMAX_TASK_NAME_LEN is 16)
-        const MAX_NAME_LEN: usize = 15;
         let mut name: [u8; MAX_NAME_LEN + 1] = [0; MAX_NAME_LEN + 1];
         let name_len = if params.name.len() < MAX_NAME_LEN { params.name.len() } else { MAX_NAME_LEN };
         name[0..name_len].clone_from_slice(&params.name.as_bytes()[0..name_len]);
 
         // Create task
-        let mut task_handle = 0 as native::TaskHandle; // not used
+        let mut task_handle = core::ptr::null_mut(); // not used
         let status = native::xTaskCreate(
             task_entry::<F>,
             name.as_ptr(),
@@ -79,6 +85,9 @@ pub fn create_task<F: FnOnce() + Send + 'static>(
 
 pub fn delay(duration: Milliseconds) {
     unsafe {
+        assert!(native::freertos_sizeof_size_t() == core::mem::size_of::<usize>() as u8);
+        assert!(native::freertos_sizeof_TickType_t() == core::mem::size_of::<u32>());
+
         native::vTaskDelay(duration.0);
     }
 }
@@ -89,5 +98,5 @@ pub fn start_scheduler() -> ! {
     }
 
     // Should not be reached (except if there's not enough heap memory left)
-    panic!();
+    panic!("Not enough heap memory");
 }
