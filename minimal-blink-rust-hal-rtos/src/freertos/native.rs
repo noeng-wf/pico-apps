@@ -17,6 +17,7 @@ extern "C" {
     // Expose FreeRTOS internal dynamic memory allocation
     // (as a helper to deal with closures in the Task abstraction)
     pub fn pvPortMalloc(wanted_size: usize) -> *mut c_void;
+    pub fn vPortFree(block: *mut c_void);
 
     // Should be 32 bit, except if configUSE_16_BIT_TICKS is set to 1
     pub fn vTaskDelay(xTicksToDelay: u32);

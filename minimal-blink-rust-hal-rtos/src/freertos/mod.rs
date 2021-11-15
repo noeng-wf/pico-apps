@@ -1,4 +1,7 @@
 mod native;
+pub mod opaque_box;
+
+use opaque_box::OpaqueBox;
 
 // FFI
 use core::ffi::c_void;
@@ -23,38 +26,23 @@ pub fn create_task<F: FnOnce() + Send + 'static>(task_func: F, params: &TaskPara
         assert!(native::freertos_sizeof_BaseType_t() == core::mem::size_of_val(&params.priority));
         assert!(native::freertos_configMAX_TASK_NAME_LEN() == MAX_NAME_LEN + 1);
 
-        let raw_size = core::mem::size_of::<F>();
-
-        let alloc_size;
-        if raw_size > 0 {
-            alloc_size = raw_size;
-        } else {
-            // Workaround:
-            // In some cases that the closure size is zero bytes (e.g. when using the module
-            // rp2040_hal::gpio::pin where all pin information is encoded into the type).
-            // The native::pvPortMalloc function doesn't support this. So at least 1 byte is
-            // allocated.
-            alloc_size = 1;
-        }
-
-        // Allocate memory for the closure (task_func) on the FreeRTOS heap. Won't be deallocated anymore.
-        let heap_ptr = native::pvPortMalloc(alloc_size) as *mut F;
-        assert!(!heap_ptr.is_null()); // Assuming that always enough heap memory
+        // Backup closure to the heap.
+        let task_func_on_heap = OpaqueBox::new(task_func);
 
         // TODO:
-        // Find a more efficient solution (move closure to heap memory and use it directly from there)
-        // than the backup and restore approach.
-        // The problem so far has been the compiler error when calling a FnOnce type via a raw pointer
-        // (compiler error: cannot move out of xxx which is behind a raw pointer). 
-        // Using FnMut instead of FnOnce is probably not a good workaround.
-
-        // Backup closure to the heap.
-        core::ptr::copy_nonoverlapping(&task_func, heap_ptr, 1);
-        core::mem::forget(task_func);
+        // A more efficient solution would be to use the closure directly on the heap (to avoid
+        // moving it back and forth) using the alloc library (Box).
+        // But then a fully blown GlobalAlloc heap implementation would be necessary based on the
+        // FreeRTOS heap. This in turn requires a nightly toolchain because of the unstable
+        // 'alloc_error_handler' attribute.
 
         // Prepare null-terminated task name (assuming configMAX_TASK_NAME_LEN is 16)
         let mut name: [u8; MAX_NAME_LEN + 1] = [0; MAX_NAME_LEN + 1];
-        let name_len = if params.name.len() < MAX_NAME_LEN { params.name.len() } else { MAX_NAME_LEN };
+        let name_len = if params.name.len() < MAX_NAME_LEN {
+            params.name.len()
+        } else {
+            MAX_NAME_LEN
+        };
         name[0..name_len].clone_from_slice(&params.name.as_bytes()[0..name_len]);
 
         // Create task
@@ -63,22 +51,15 @@ pub fn create_task<F: FnOnce() + Send + 'static>(task_func: F, params: &TaskPara
             task_entry::<F>,
             name.as_ptr(),
             params.stack_depth,
-            heap_ptr as *mut c_void,
+            task_func_on_heap.into_raw() as *mut c_void,
             params.priority,
-            &mut task_handle
+            &mut task_handle,
         );
         assert!(status == 1); // Assuming that it always succeeds (pdPASS is 1)
 
         extern "C" fn task_entry<F: FnOnce()>(param: *mut c_void) {
-            let heap_ptr = param as *mut F;
-            unsafe {
-                // Restore closure from the heap.
-                let mut task_func = core::mem::MaybeUninit::<F>::uninit();
-                core::ptr::copy_nonoverlapping(heap_ptr, task_func.as_mut_ptr(), 1);
-
-                // Call it
-                task_func.assume_init()();
-            }
+            let task_func = unsafe { OpaqueBox::from_raw(param as *mut F).unbox() };
+            task_func();
         }
     }
 }
