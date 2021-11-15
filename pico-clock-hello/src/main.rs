@@ -5,15 +5,19 @@
 #![no_main]
 
 mod display;
+mod freertos;
 mod text;
 
-use cortex_m_rt::{entry, exception};
+use cortex_m_rt::entry;
 use pico::hal;
 use pico::hal::pac;
 
 use ds323x::Ds323x;
 use ds323x::Hours;
 use embedded_time::rate::Extensions;
+
+// Time
+use embedded_time::duration::Milliseconds;
 
 use display::data::DOT_MATRIX_WIDTH;
 use display::Display;
@@ -30,7 +34,6 @@ pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 fn main() -> ! {
     // Peripherals
     let mut pac = pac::Peripherals::take().unwrap();
-    let mut core_pac = pac::CorePeripherals::take().unwrap();
     // Watchdog driver needed for clock setup
     let mut watchdog = hal::watchdog::Watchdog::new(pac.WATCHDOG);
 
@@ -47,15 +50,6 @@ fn main() -> ! {
     )
     .ok()
     .unwrap();
-
-    // Initialize SysTick interrupt with 1ms period
-    core_pac.SYST.set_reload(1000); // 1000us
-    core_pac.SYST.clear_current();
-    core_pac.SYST.enable_counter();
-    core_pac.SYST.enable_interrupt();
-
-    // Configure the Timer peripheral in count-down mode
-    let timer = hal::timer::Timer::new(pac.TIMER, &mut pac.RESETS);
 
     // The single-cycle I/O block controls our GPIO pins
     let sio = hal::sio::Sio::new(pac.SIO);
@@ -88,28 +82,27 @@ fn main() -> ! {
         &mut pac.RESETS,
         clocks.peripheral_clock,
     );
-    let mut rtc = Ds323x::new_ds3231(i2c);
 
-    let mut animation_cycle = CycleGenerator::new(&timer, 120000);
+    freertos::create_task(
+        move || {
+            let mut rtc = Ds323x::new_ds3231(i2c);
 
-    let text_bitmap = TextBitmap::from_str("Hello world!").unwrap();
-    let mut display_fsm = DisplayFsm::new(&text_bitmap, &mut rtc);
+            let text_bitmap = TextBitmap::from_str("Hello world!").unwrap();
+            let mut display_fsm = DisplayFsm::new(&text_bitmap, &mut rtc);
 
-    loop {
-        if animation_cycle.is_elapsed() {
-            // Note:
-            // This should only be called if the step counter actually changes to avoid too much CPU load
-            // making visible varation of the scan cycle duration (causing slight LED flickering).
-            display_fsm.next_step(&mut display);
-        }
-    }
-}
+            loop {
+                display_fsm.next_step(&mut display);
+                freertos::delay(Milliseconds(120));
+            }
+        },
+        &freertos::TaskParameters {
+            name: "AnimationTask",
+            stack_depth: 1024,
+            priority: 1,
+        },
+    );
 
-#[exception]
-unsafe fn SysTick() {
-    static mut DISPLAY_SYS_TICK_CONTEXT: display::SysTickContext = display::SysTickContext::new();
-
-    Display::on_sys_tick_interrupt(DISPLAY_SYS_TICK_CONTEXT);
+    freertos::start_scheduler();
 }
 
 enum DisplayFsmState {
@@ -238,32 +231,5 @@ impl<'a, 'b, RtccError> DisplayFsm<'a, 'b, RtccError> {
         }
 
         Some((hours, minutes))
-    }
-}
-
-struct CycleGenerator<'a> {
-    timer: &'a hal::timer::Timer,
-    period_us: u64,
-    next_counter_us: u64,
-}
-
-impl<'a> CycleGenerator<'a> {
-    fn new(timer: &'a hal::timer::Timer, period_us: u64) -> Self {
-        Self {
-            timer,
-            period_us,
-            next_counter_us: timer.get_counter(),
-        }
-    }
-
-    fn is_elapsed(&mut self) -> bool {
-        let counter_us = self.timer.get_counter();
-
-        if counter_us >= self.next_counter_us {
-            self.next_counter_us += self.period_us;
-            true
-        } else {
-            false
-        }
     }
 }

@@ -4,8 +4,13 @@
 pub mod data;
 pub mod pins;
 
+use crate::freertos;
+
 use embedded_hal::digital::v2::OutputPin;
 use embedded_hal::digital::v2::PinState;
+
+// Time
+use embedded_time::duration::Milliseconds;
 
 // Interrupt handler concurrency
 use core::cell::RefCell;
@@ -15,26 +20,10 @@ use cortex_m::interrupt::Mutex;
 use crate::display::data::{Data, RawData, RAW_HEIGHT, RAW_WIDTH};
 use crate::display::pins::Pins;
 
-pub struct SysTickContext {
-    pins: Option<Pins>,
-    scan_row: usize,
-}
-
-impl SysTickContext {
-    pub const fn new() -> Self {
-        Self {
-            pins: None,
-            scan_row: 0,
-        }
-    }
-}
-
-struct SysTickInit {
-    pins: Pins,
-}
-
-static SYS_TICK_INIT: Mutex<RefCell<Option<SysTickInit>>> = Mutex::new(RefCell::new(None));
-
+/// TODO:
+/// - Use an abstraction of a FreeRTOS mutex.
+/// - Not a static variable anymore: Put the mutex on the heap with an Rc/Arc equivalent?
+///   (each display instance having its own mutex)
 static SYS_TICK_DATA: Mutex<RefCell<RawData>> = Mutex::new(RefCell::new([0; RAW_HEIGHT]));
 
 /// Abstraction of the dot matrix LED display.
@@ -55,10 +44,32 @@ impl Display {
         // Disable output by default
         pins.output_disable.set_high().unwrap();
 
-        // Initialization context for SysTick handler (variables to be moved into the handler)
-        interrupt::free(|cs| {
-            SYS_TICK_INIT.borrow(cs).replace(Some(SysTickInit { pins }));
-        });
+        freertos::create_task(
+            move || {
+                let mut row: usize = 0;
+                loop {
+                    let mut raw_data: u32 = 0;
+                    interrupt::free(|cs| {
+                        raw_data = SYS_TICK_DATA.borrow(cs).borrow()[row];
+                    });
+
+                    pins.output_disable.set_high().unwrap();
+                    Display::select_row(&mut pins, row);
+                    Display::write_row(&mut pins, raw_data);
+                    pins.output_disable.set_low().unwrap();
+
+                    row = (row + 1) % RAW_HEIGHT;
+
+                    // Required loop frequency: Refresh rate multiplied by 8 rows
+                    freertos::delay(Milliseconds(1));
+                }
+            },
+            &freertos::TaskParameters {
+                name: "DisplayTask",
+                stack_depth: 1024,
+                priority: 2, // higher than others
+            },
+        );
 
         Self { data: Data::new() }
     }
@@ -69,39 +80,6 @@ impl Display {
     {
         func(&mut self.data);
         interrupt::free(|cs| SYS_TICK_DATA.borrow(cs).replace(self.data.raw_data));
-    }
-
-    /// Will be periodically from SysTick interrupt (frequency: refresh rate multiplied by 8 rows)
-    ///
-    /// Notes:
-    /// The context argument allows storing context data in the interrupt handler to avoid marking code
-    /// in this module as unsafe because of otherwise required local 'static mut' variables
-    /// in on_sys_tick_interrupt().
-    /// The 'expection' attribute on the interrupt handler does some magic so this problem doesn't
-    /// occur there.
-    pub fn on_sys_tick_interrupt(context: &mut SysTickContext) {
-        // Initialize pins if required
-        if context.pins.is_none() {
-            interrupt::free(|cs| {
-                if let Some(init) = SYS_TICK_INIT.borrow(cs).borrow_mut().take() {
-                    context.pins.replace(init.pins);
-                }
-            });
-        }
-
-        if let Some(pins) = context.pins.as_mut() {
-            let mut raw_data: u32 = 0;
-            interrupt::free(|cs| {
-                raw_data = SYS_TICK_DATA.borrow(cs).borrow()[context.scan_row];
-            });
-
-            pins.output_disable.set_high().unwrap();
-            Display::select_row(pins, context.scan_row);
-            Display::write_row(pins, raw_data);
-            pins.output_disable.set_low().unwrap();
-
-            context.scan_row = (context.scan_row + 1) % RAW_HEIGHT;
-        }
     }
 
     fn select_row(pins: &mut Pins, row: usize) {
