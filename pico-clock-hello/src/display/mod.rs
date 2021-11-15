@@ -66,7 +66,7 @@ impl Display {
             &freertos::TaskParameters {
                 name: "DisplayTask",
                 stack_depth: 1024,
-                priority: 2, // higher than others
+                priority: crate::DISPLAY_TASK_PRIORITY,
             },
         );
 

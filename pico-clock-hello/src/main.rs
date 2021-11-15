@@ -4,12 +4,14 @@
 #![no_std]
 #![no_main]
 
+mod cli;
 mod display;
 mod freertos;
 mod text;
 
 use cortex_m_rt::entry;
 use pico::hal;
+use pico::hal::clocks::Clock;
 use pico::hal::pac;
 
 use ds323x::Ds323x;
@@ -25,6 +27,10 @@ use text::TextBitmap;
 
 // Program shall halt on panic
 use panic_halt as _;
+
+const DISPLAY_TASK_PRIORITY: u32 = 3;
+const ANIMATION_TASK_PRIORITY: u32 = 2;
+const CLI_TASK_PRIORITY: u32 = 1;
 
 #[link_section = ".boot2"]
 #[used]
@@ -80,8 +86,21 @@ fn main() -> ! {
         scl_pin,
         400.kHz(),
         &mut pac.RESETS,
-        clocks.peripheral_clock,
+        clocks.peripheral_clock.freq(),
     );
+
+    let mut uart = hal::uart::UartPeripheral::<_, _>::enable(
+        pac.UART0,
+        &mut pac.RESETS,
+        hal::uart::common_configs::_115200_8_N_1,
+        clocks.peripheral_clock.freq(),
+    )
+    .unwrap();
+
+    // UART TX (characters sent from RP2040) on pin 1 (GPIO0)
+    let _tx_pin = pins.gpio0.into_mode::<hal::gpio::FunctionUart>();
+    // UART RX (characters reveived by RP2040) on pin 2 (GPIO1)
+    let _rx_pin = pins.gpio1.into_mode::<hal::gpio::FunctionUart>();
 
     freertos::create_task(
         move || {
@@ -98,7 +117,18 @@ fn main() -> ! {
         &freertos::TaskParameters {
             name: "AnimationTask",
             stack_depth: 1024,
-            priority: 1,
+            priority: ANIMATION_TASK_PRIORITY,
+        },
+    );
+
+    freertos::create_task(
+        move || {
+            cli::run(&mut uart);
+        },
+        &freertos::TaskParameters {
+            name: "CliTask",
+            stack_depth: 1024,
+            priority: CLI_TASK_PRIORITY,
         },
     );
 
