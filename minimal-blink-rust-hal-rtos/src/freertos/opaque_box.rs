@@ -23,7 +23,7 @@ impl<T> OpaqueBox<T> {
         // Note: Depending on the type the size may be 0 so a work around is needed in that case.
         if value_size > 0 {
             // Precaution:
-            // Do memory allocation done with disabled interrupts to allow using it in an
+            // Do memory allocation with disabled interrupts to allow using it in an
             // interrupt handler.
             interrupt::free(|_| {
                 // Allocate block on heap (not respecting the alignment!).
@@ -79,7 +79,7 @@ impl<T> Drop for OpaqueBox<T> {
             assert!(!self.heap_ptr.is_null());
 
             // Precaution:
-            // Do memory deallocation done with disabled interrupts to allow using it in an
+            // Do memory deallocation with disabled interrupts to allow using it in an
             // interrupt handler.
             interrupt::free(|_| {
                 unsafe { native::vPortFree(self.heap_ptr as *mut c_void) };
