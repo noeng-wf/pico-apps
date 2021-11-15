@@ -14,3 +14,6 @@ embedded-hal = "0.2"
 embedded-time = "0.12"
 pico = { git = "https://github.com/rp-rs/rp-hal.git" }
 ds323x = "0.4"
+
+[build-dependencies]
+cmake = "0.1"
