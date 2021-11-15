@@ -13,7 +13,7 @@ use embedded_hal::digital::v2::PinState;
 use embedded_time::duration::Milliseconds;
 
 // Interrupt handler concurrency
-use core::cell::RefCell;
+use core::cell::Cell;
 use cortex_m::interrupt;
 use cortex_m::interrupt::Mutex;
 
@@ -24,7 +24,7 @@ use crate::display::pins::Pins;
 /// - Use an abstraction of a FreeRTOS mutex.
 /// - Not a static variable anymore: Put the mutex on the heap with an Rc/Arc equivalent?
 ///   (each display instance having its own mutex)
-static SYS_TICK_DATA: Mutex<RefCell<RawData>> = Mutex::new(RefCell::new([0; RAW_HEIGHT]));
+static SYS_TICK_DATA: Mutex<Cell<RawData>> = Mutex::new(Cell::new([0; RAW_HEIGHT]));
 
 /// Abstraction of the dot matrix LED display.
 pub struct Display {
@@ -46,22 +46,21 @@ impl Display {
 
         freertos::create_task(
             move || {
-                let mut row: usize = 0;
                 loop {
-                    let mut raw_data: u32 = 0;
+                    let mut raw_data = [0; RAW_HEIGHT];
                     interrupt::free(|cs| {
-                        raw_data = SYS_TICK_DATA.borrow(cs).borrow()[row];
+                        raw_data = SYS_TICK_DATA.borrow(cs).get();
                     });
 
-                    pins.output_disable.set_high().unwrap();
-                    Display::select_row(&mut pins, row);
-                    Display::write_row(&mut pins, raw_data);
-                    pins.output_disable.set_low().unwrap();
+                    for row in 0..RAW_HEIGHT {
+                        pins.output_disable.set_high().unwrap();
+                        Display::select_row(&mut pins, row);
+                        Display::write_row(&mut pins, raw_data[row]);
+                        pins.output_disable.set_low().unwrap();
 
-                    row = (row + 1) % RAW_HEIGHT;
-
-                    // Required loop frequency: Refresh rate multiplied by 8 rows
-                    freertos::delay(Milliseconds(1));
+                        // Required loop frequency: Refresh rate multiplied by 8 rows
+                        freertos::delay(Milliseconds(1));
+                    }
                 }
             },
             &freertos::TaskParameters {
