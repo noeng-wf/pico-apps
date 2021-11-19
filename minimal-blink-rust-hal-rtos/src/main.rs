@@ -89,7 +89,7 @@ fn main() -> ! {
         },
         &freertos::TaskParameters {
             name: "LED task",
-            stack_depth: 1024,
+            stack_depth: 1024, // Is actually 4096 bytes because portSTACK_TYPE is uint32_t
             priority: 1,
         },
     );

@@ -65,7 +65,7 @@ impl Display {
             },
             &freertos::TaskParameters {
                 name: "DisplayTask",
-                stack_depth: 1024,
+                stack_depth: 1024, // Is actually 4096 bytes because portSTACK_TYPE is uint32_t
                 priority: crate::DISPLAY_TASK_PRIORITY,
             },
         );
