@@ -1,4 +1,5 @@
 mod line_input;
+mod arguments;
 
 use embedded_hal::serial::Read as HalRead;
 use embedded_hal::serial::Write as HalWrite;
@@ -13,12 +14,16 @@ use nb::block;
 
 use line_input::{LineInput, LineInputResult};
 
+use arguments::{ArgumentError, split_first_argument};
+
+const MAX_LINE_LENGTH: usize = 100;
+
 pub trait Timer {
     fn sleep_ms(&self, delay_ms: u32);
 }
 
 pub fn run<T: HalRead<u8> + HalWrite<u8> + Write>(uart: &mut T) -> ! {
-    let mut input = LineInput::<100>::new();
+    let mut input = LineInput::<MAX_LINE_LENGTH>::new();
 
     print_prompt(uart);
 
@@ -58,20 +63,20 @@ fn print_newline<T: Write>(uart: &mut T) {
     write!(uart, "\r\n").unwrap();
 }
 
-fn process_line<T: Write>(uart: &mut T, line: &str) {
-    let line = line.trim();
-    if line.len() == 0 {
-        return;
-    }
-
-    let mut iter = line.split_whitespace();
-    match iter.next().unwrap() {
+fn process_line<T: Write>(uart: &mut T, line: &str) -> Result<(), ArgumentError> {
+    let line = line.trim(); // ensure that split_first_argument returns empty string after last argument
+    let mut buffer: [u8; MAX_LINE_LENGTH] = [0; MAX_LINE_LENGTH];
+    let (command, remaining_line) = split_first_argument(line, &mut buffer)?;
+    match command {
+        "" => {
+            return Ok(());
+        },
         "settext" => {
-            write!(uart, "To be implemented\r\n").unwrap();
-        }
+            process_settext_command(uart, remaining_line)?;
+        },
         "settime" => {
-            write!(uart, "To be implemented\r\n").unwrap();
-        }
+            process_settime_command(uart, remaining_line)?;
+        },
         "help" => print_help(uart),
         _ => {
             write!(uart, "Unknown command\r\n").unwrap();
@@ -79,6 +84,18 @@ fn process_line<T: Write>(uart: &mut T, line: &str) {
             print_help(uart);
         }
     }
+
+    Ok(())
+}
+
+fn process_settext_command<T: Write>(uart: &mut T, _line: &str) -> Result<(), ArgumentError> {
+    write!(uart, "To be implemented\r\n").unwrap();
+    Ok(())
+}
+
+fn process_settime_command<T: Write>(uart: &mut T, _line: &str) -> Result<(), ArgumentError> {
+    write!(uart, "To be implemented\r\n").unwrap();
+    Ok(())
 }
 
 fn print_help<T: Write>(uart: &mut T) {
